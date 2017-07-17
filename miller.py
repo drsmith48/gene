@@ -8,12 +8,15 @@ Created on Tue Mar 26 09:32:25 2013
 from __future__ import print_function
 from __future__ import division
 
+import os.path
+import tkinter.filedialog as fd
 from builtins import range
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import RectBivariateSpline as RBS
 from scipy.interpolate import interp1d
 from scipy.interpolate import UnivariateSpline as US
+from jinja2 import Environment, FileSystemLoader
 
 
 def find(val, arr):
@@ -29,9 +32,14 @@ def find(val, arr):
 
 class Miller(object):
 
-    def __init__(self, gfile='pegasus-eq21.geqdsk', plot=True, rova=0.75, psinorm=None):
-        self.gfile = gfile
+    def __init__(self, gfile=None, plot=True, rova=None, psinorm=0.8):
         self.plot = plot
+        if not gfile:
+            if os.path.exists('pegasus-eq21.geqdsk'):
+                gfile = 'pegasus-eq21.geqdsk'
+            else:
+                gfile = fd.askopenfile()
+        self.gfile = gfile
         if psinorm:
             # use psinorm
             self.psinorm = psinorm
@@ -355,17 +363,12 @@ class Miller(object):
 
     def calc_miller(self):
 
-        # splines on r_minor space
-        psi_grid_spl =  US(self.r_minor_fs, self.psi_grid,   k=self.io, s=self.s)
-        q_spl =         US(self.r_minor_fs, self.qpsi_fs,    k=self.io, s=self.s)
-        R0_spl =        US(self.r_minor_fs, self.R_major_fs, k=self.io, s=self.s)
-        F_spl =         US(self.r_minor_fs, self.F_fs,       k=self.io, s=self.s)
-        p_spl =         US(self.r_minor_fs, self.p_fs,       k=self.io, s=self.s)
-        pprime_spl =    US(self.r_minor_fs, self.pprime_fs,  k=self.io, s=1e-4)
-        # splines on psi grid
-        q_spl_psi =     US(self.psi_grid,   self.qpsi_fs,    k=self.io, s=self.s)
-        r_min_spl =     US(self.psi_grid,   self.r_minor_fs, k=self.io, s=self.s)
+        output = {}
+        output['Lref'] = self.a_lcfs
+
         # position values
+        psi_grid_spl =  US(self.r_minor_fs, self.psi_grid,   k=self.io, s=self.s)
+        r_min_spl =     US(self.psi_grid,   self.r_minor_fs, k=self.io, s=self.s)
         if self.rova:
             # calc psi, psinorm, and r from r/a
             r_poi = self.rova * self.a_lcfs  # r = r/a * a; FS minor radius
@@ -376,17 +379,30 @@ class Miller(object):
             psi_poi = self.psinorm * (self.psisep - self.psiax) + self.psiax
             r_poi = float(r_min_spl(psi_poi))
             self.rova = r_poi / self.a_lcfs
+
+
+        R0_spl = US(self.r_minor_fs, self.R_major_fs, k=self.io, s=self.s)
         R0_poi = float(R0_spl(r_poi))  # R_maj of FS
+        F_spl = US(self.r_minor_fs, self.F_fs,       k=self.io, s=self.s)
         F_poi = float(F_spl(r_poi))  # F of FS
+        Bref_poi = F_poi / R0_poi
+        output['Bref'] = Bref_poi
+
+
+        q_spl =         US(self.r_minor_fs, self.qpsi_fs,    k=self.io, s=self.s)
+        p_spl =         US(self.r_minor_fs, self.p_fs,       k=self.io, s=self.s)
+        pprime_spl =    US(self.r_minor_fs, self.pprime_fs,  k=self.io, s=1e-4)
+        q_spl_psi =     US(self.psi_grid,   self.qpsi_fs,    k=self.io, s=self.s)
+
         p_poi = float(p_spl(r_poi))
         n_poi = p_poi / (self.ti*1e3*1.602e-19) / 1e19
         pprime_poi = float(pprime_spl(r_poi))
-        Bref_poi = F_poi / R0_poi
         q_poi = float(q_spl_psi(psi_poi))
         drdpsi_poi = float(r_min_spl.derivatives(psi_poi)[1])
         dpdr_poi = pprime_poi/drdpsi_poi
         omp_poi = -float((self.a_lcfs / p_poi) * (pprime_poi / drdpsi_poi))
         pm_poi = Bref_poi**2/(2*4*3.14e-7)
+
 
         print('\n*** FS at r/a = {:.2f} ***'.format(self.rova))
         print('r_min = {:.3f} m'.format(r_poi))
@@ -638,4 +654,4 @@ class Miller(object):
 
 
 if __name__ == '__main__':
-    eq = Miller(plot=0, psinorm=0.8)
+    eq = Miller(plot=0)
