@@ -4,6 +4,11 @@
 Created on Tue Mar 26 09:32:25 2013
 
 @author: dtold
+
+July 2017 - Refactored (David R. Smith)
+    "Futurized" for python 2/3 compatability
+    Created Geqdsk class to process geqdsk files and 
+    extract Miller quantities
 """
 from __future__ import print_function
 from __future__ import division
@@ -28,16 +33,29 @@ def get_filename():
 
 
 class Geqdsk(object):
+    """Class for geqdsk files.
+    
+    Args:
+        gfile (str, default None): filename for geqdsk file; 
+            will present file dialog if evaluates to false
+        plot (bool, default True): plot profiles
+        
+    Methods:
+        load_gfile():  Select new geqdsk file from dialog, then load
+        miller(...):   Calculate Miller quantities
+        __call__(...): Alias for miller(...)
+        
+    Return:
+        Geqdsk object
+    """
 
     def __init__(self, gfile=None, plot=True):
+        """See class docstring."""
         self.plot = plot
-        if not gfile:
-            if os.path.exists('pegasus-eq21.geqdsk') and False:
-                gfile = 'pegasus-eq21.geqdsk'
-            else:
-                gfile = get_filename()
         self.gfile = gfile
-
+        if not self.gfile:
+            self.gfile = get_filename()
+        
         self.psinorm = None
         self.rova= None
 
@@ -47,10 +65,11 @@ class Geqdsk(object):
         self.s = 1.e-5
         self.ti = 0.1 # ion temp in keV
 
-        self.process_gfile()
+        self._process_gfile()
         self.plot_gfile()
 
     def __call__(self, *args, **kwargs):
+        """Alias for miller()."""
         return self.miller(*args, **kwargs)
 
     def _find(self, val, arr):
@@ -62,8 +81,13 @@ class Geqdsk(object):
                 ind = i
                 mindiff = diff
         return ind
+    
+    def load_gfile(self):
+        self.gfile = get_filename()
+        self._process_gfile()
+        self.plot_gfile()
 
-    def process_gfile(self):
+    def _process_gfile(self):
 
         # read geqdsk file
         with open(self.gfile, 'r') as gfile:
@@ -353,13 +377,31 @@ class Geqdsk(object):
             plt.gca().set_aspect('equal')
 
 
-    def miller(self, rova=None, psinorm=0.8, omt_factor=0.2):
+    def miller(self, psinorm=0.8, rova=None, omt_factor=0.2):
+        """
+        Calculate Miller quantities.
+        
+        Args:
+            psinorm (float, default 0.8):
+                psi-norm for Miller quantities (overrides rova)
+            rova (float, default None):
+                r/a for Miller quantities (ignored if psinorm evals to True)
+            omt_factor (float, default 0.2):
+                sets omt = omp * omt_factor
+                and omn = omp * (1-omt_factor)
+                
+        Returns:
+            dictionary with Miller quantities and reference values
+            for GENE simulation
+        """
 
         output = {}
 
         if psinorm:
             # use psinorm
             self.psinorm = psinorm
+            if self.rova:
+                print('ignoring `rova`, using `psinorm`')
             self.rova = None
         else:
             # use rova
@@ -379,13 +421,16 @@ class Geqdsk(object):
             psi_poi = self.psinorm * (self.psisep - self.psiax) + self.psiax
             r_poi = float(r_min_spl(psi_poi))
             self.rova = r_poi / self.a_lcfs
-
+            
+        output['gfile'] = self.gfile
+        output['psinorm'] = self.psinorm
+        output['rova'] = self.rova
 
         R0_spl = US(self.r_minor_fs, self.R_major_fs, k=self.io, s=self.s)
-        R0_poi = float(R0_spl(r_poi))  # R_maj of FS
+        R0_poi = R0_spl(r_poi)[()]  # R_maj of FS
         q_spl = US(self.r_minor_fs, self.qpsi_fs,    k=self.io, s=self.s)
         #q_spl_psi = US(self.psi_grid,   self.qpsi_fs,    k=self.io, s=self.s)
-        q_poi = float(q_spl(r_poi))
+        q_poi = q_spl(r_poi)[()]
         drdpsi_poi = float(r_min_spl.derivatives(psi_poi)[1])
         eps_poi = r_poi / R0_poi
         print('\n*** Flux surfance ***')
@@ -399,10 +444,10 @@ class Geqdsk(object):
         print('dr/dpsi = {:.3g} m/(Wb/rad)'.format(drdpsi_poi))
 
         F_spl = US(self.r_minor_fs, self.F_fs,       k=self.io, s=self.s)
-        F_poi = float(F_spl(r_poi))  # F of FS
+        F_poi = F_spl(r_poi)[()]  # F of FS
         Bref_poi = F_poi / R0_poi
         p_spl =         US(self.r_minor_fs, self.p_fs,       k=self.io, s=self.s)
-        p_poi = float(p_spl(r_poi))
+        p_poi = p_spl(r_poi)[()]
         n_poi = p_poi / (self.ti*1e3*1.602e-19) / 1e19
         output['Lref'] = self.a_lcfs
         output['Bref'] = Bref_poi
@@ -417,10 +462,10 @@ class Geqdsk(object):
         print('nref = {:.3g} 1e19/m^3'.format(n_poi))
 
         pprime_spl = US(self.r_minor_fs, self.pprime_fs,  k=self.io, s=1e-4)
-        pprime_poi = float(pprime_spl(r_poi))
+        pprime_poi = pprime_spl(r_poi)[()]
         pm_poi = Bref_poi**2/(2*4*3.14e-7)
         dpdr_poi = pprime_poi/drdpsi_poi
-        omp_poi = -float((self.a_lcfs / p_poi) * dpdr_poi)
+        omp_poi = -(self.a_lcfs / p_poi) * dpdr_poi
         dpdx_pm = -dpdr_poi/pm_poi
         output['dpdx_pm'] = dpdx_pm
         output['omp'] = omp_poi
@@ -595,14 +640,14 @@ class Geqdsk(object):
         output['trpeps'] = eps_poi
         output['q0'] = q_poi
         output['shat'] = (r_poi / q_poi) * q_spl.derivatives(r_poi)[1]
-        output['amhd'] = amhd_spl(r_poi)
-        output['drR'] = drR_spl(r_poi)
-        output['kappa'] = kappa_spl(r_poi)
-        output['s_kappa'] = kappa_spl.derivatives(r_poi)[1] * r_poi / kappa_spl(r_poi)
-        output['delta'] = delta_spl(r_poi)
+        output['amhd'] = amhd_spl(r_poi)[()]
+        output['drR'] = drR_spl(r_poi)[()]
+        output['kappa'] = kappa_spl(r_poi)[()]
+        output['s_kappa'] = kappa_spl.derivatives(r_poi)[1] * r_poi / kappa_spl(r_poi)[()]
+        output['delta'] = delta_spl(r_poi)[()]
         output['s_delta'] = delta_spl.derivatives(r_poi)[1] * r_poi \
-                                        / np.sqrt(1 - delta_spl(r_poi)**2)
-        output['zeta'] = zeta_spl(r_poi)
+                                        / np.sqrt(1 - delta_spl(r_poi)[()]**2)
+        output['zeta'] = zeta_spl(r_poi)[()]
         output['s_zeta'] = zeta_spl.derivatives(r_poi)[1] * r_poi
         output['minor_r'] = 1.0
         output['major_R'] = R0_poi / self.a_lcfs
