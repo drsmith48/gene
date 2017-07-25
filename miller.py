@@ -19,20 +19,11 @@ from scipy.interpolate import UnivariateSpline as US
 from jinja2 import Environment, FileSystemLoader
 
 
-def find(val, arr):
-    ind = 0
-    mindiff = 1000.
-    for i,arr_val in enumerate(arr):
-        diff = abs(arr_val - val)
-        if diff < mindiff:
-            ind = i
-            mindiff = diff
-    return ind
 
 
-class Miller(object):
+class Geqdsk(object):
 
-    def __init__(self, gfile=None, plot=True, rova=None, psinorm=0.8):
+    def __init__(self, gfile=None, plot=True):
         self.plot = plot
         if not gfile:
             if os.path.exists('pegasus-eq21.geqdsk'):
@@ -40,14 +31,9 @@ class Miller(object):
             else:
                 gfile = fd.askopenfile()
         self.gfile = gfile
-        if psinorm:
-            # use psinorm
-            self.psinorm = psinorm
-            self.rova = None
-        else:
-            # use rova
-            self.rova = rova
-            self.psinorm = None
+
+        self.psinorm = None
+        self.rova= None
 
         self.ntheta = 150
         self.nw = None
@@ -57,19 +43,19 @@ class Miller(object):
 
         self.process_gfile()
         self.plot_gfile()
-        self.calc_miller()
 
-    def __call__(self, rova=0.75, psinorm=None):
-        if psinorm:
-            # use psinorm
-            self.psinorm = psinorm
-            self.rova = None
-        else:
-            # use rova
-            self.rova = rova
-            self.psinorm = None
+    def __call__(self, *args, **kwargs):
+        return self.miller(*args, **kwargs)
 
-        self.calc_miller()
+    def _find(self, val, arr):
+        ind = 0
+        mindiff = 1000.
+        for i,arr_val in enumerate(arr):
+            diff = abs(arr_val - val)
+            if diff < mindiff:
+                ind = i
+                mindiff = diff
+        return ind
 
     def process_gfile(self):
 
@@ -361,10 +347,18 @@ class Miller(object):
             plt.gca().set_aspect('equal')
 
 
-    def calc_miller(self):
+    def miller(self, rova=None, psinorm=0.8, omt_factor=0.2):
 
         output = {}
-        output['Lref'] = self.a_lcfs
+
+        if psinorm:
+            # use psinorm
+            self.psinorm = psinorm
+            self.rova = None
+        else:
+            # use rova
+            self.rova = rova
+            self.psinorm = None
 
         # position values
         psi_grid_spl =  US(self.r_minor_fs, self.psi_grid,   k=self.io, s=self.s)
@@ -383,46 +377,61 @@ class Miller(object):
 
         R0_spl = US(self.r_minor_fs, self.R_major_fs, k=self.io, s=self.s)
         R0_poi = float(R0_spl(r_poi))  # R_maj of FS
+        q_spl = US(self.r_minor_fs, self.qpsi_fs,    k=self.io, s=self.s)
+        #q_spl_psi = US(self.psi_grid,   self.qpsi_fs,    k=self.io, s=self.s)
+        q_poi = float(q_spl(r_poi))
+        drdpsi_poi = float(r_min_spl.derivatives(psi_poi)[1])
+        eps_poi = r_poi / R0_poi
+        print('\n*** Flux surfance ***')
+        print('r_min/a = {:.3f}'.format(self.rova))
+        print('psinorm = {:.3f}'.format(self.psinorm))
+        print('r_min = {:.3f} m'.format(r_poi))
+        print('R_maj = {:.3f} m'.format(R0_poi))
+        print('eps = {:.3f}'.format(eps_poi))
+        print('q = {:.3f}'.format(q_poi))
+        print('psi = {:.3e} Wb/rad'.format(psi_poi))
+        print('dr/dpsi = {:.3g} m/(Wb/rad)'.format(drdpsi_poi))
+
         F_spl = US(self.r_minor_fs, self.F_fs,       k=self.io, s=self.s)
         F_poi = float(F_spl(r_poi))  # F of FS
         Bref_poi = F_poi / R0_poi
-        output['Bref'] = Bref_poi
-
-
-        q_spl =         US(self.r_minor_fs, self.qpsi_fs,    k=self.io, s=self.s)
         p_spl =         US(self.r_minor_fs, self.p_fs,       k=self.io, s=self.s)
-        pprime_spl =    US(self.r_minor_fs, self.pprime_fs,  k=self.io, s=1e-4)
-        q_spl_psi =     US(self.psi_grid,   self.qpsi_fs,    k=self.io, s=self.s)
-
         p_poi = float(p_spl(r_poi))
         n_poi = p_poi / (self.ti*1e3*1.602e-19) / 1e19
+        output['Lref'] = self.a_lcfs
+        output['Bref'] = Bref_poi
+        output['pref'] = p_poi
+        output['Tref'] = self.ti
+        output['nref'] = n_poi
+        print('\n*** Reference values ***')
+        print('Lref = {:.3g} m ! for Lref=a convention'.format(self.a_lcfs))
+        print('Bref = {:.3g} T'.format(Bref_poi))
+        print('pref = {:.3g} Pa'.format(p_poi))
+        print('Tref = {:.3g} keV'.format(self.ti))
+        print('nref = {:.3g} 1e19/m^3'.format(n_poi))
+
+        pprime_spl = US(self.r_minor_fs, self.pprime_fs,  k=self.io, s=1e-4)
         pprime_poi = float(pprime_spl(r_poi))
-        q_poi = float(q_spl_psi(psi_poi))
-        drdpsi_poi = float(r_min_spl.derivatives(psi_poi)[1])
-        dpdr_poi = pprime_poi/drdpsi_poi
-        omp_poi = -float((self.a_lcfs / p_poi) * (pprime_poi / drdpsi_poi))
         pm_poi = Bref_poi**2/(2*4*3.14e-7)
+        dpdr_poi = pprime_poi/drdpsi_poi
+        omp_poi = -float((self.a_lcfs / p_poi) * dpdr_poi)
+        dpdx_pm = -dpdr_poi/pm_poi
+        output['dpdx_pm'] = dpdx_pm
+        output['omp'] = omp_poi
+        print('\n*** Pressure gradients ***')
+        print('dp/dpsi      = {:.3g} Pa/(Wb/rad)'.format(pprime_poi))
+        print('p_m = 2mu/Bref**2 = {:.3g} Pa'.format(pm_poi))
+        print('-(dp/dr)/p_m      = {:.3g} 1/m'.format(dpdx_pm))
+        print('omp = a/p * dp/dr = {:.3g} ! with Lref=a'.format(omp_poi))
 
-
-        print('\n*** FS at r/a = {:.2f} ***'.format(self.rova))
-        print('r_min = {:.3f} m'.format(r_poi))
-        print('R_maj = {:.3f} m'.format(R0_poi))
-        print('eps = {:.3f}'.format(r_poi / R0_poi))
-        print('q = {:.3f}'.format(q_poi))
-        print('psi = {:.3e} Wb/rad'.format(psi_poi))
-        print('psi_N = {:.3f}'.format(self.psinorm))
-        print('p = {:.3g} Pa'.format(p_poi))
-        print('T = {:.2f} keV'.format(self.ti))
-        print('n = {:.3g} 1e19m^-3'.format(n_poi))
-        print("p' = dp/dpsi = {:.3g} Pa/(Wb/rad)".format(pprime_poi))
-        print("r' = dr/dpsi = {:.3g} m/(Wb/rad)".format(drdpsi_poi))
-        print("omp = a/p * p'/r' = {:.4g} (with Lref=a)".format(omp_poi))
-        print('p_m = 2mu/Bref**2 = {:.4g} Pa'.format(pm_poi))
-        print('-grad(p)/p_m = {:.4g}'.format(-dpdr_poi/pm_poi))
-        print('\nAdditional information:')
-        print('Lref        = %9.5g !for Lref=a convention' % self.a_lcfs)
-        print('Bref        = %9.5g' % Bref_poi)
-
+        omt = omp_poi * omt_factor
+        omn = omp_poi - omt
+        output['omt'] = omt
+        output['omn'] = omn
+        print('\n*** Temp/dens gradients ***')
+        print('omt_factor = {:.3g}'.format(omt_factor))
+        print('omt = a/T * dT/dr = {:.3g}'.format(omt))
+        print('omn = a/n * dn/dr = {:.3g}'.format(omn))
 
 
         sgstart = self.nw // 10
@@ -522,10 +531,10 @@ class Miller(object):
                     raise ValueError('out of range')
                 if o in [0, 1]:
                     searcharr2 = searcharr[self.ntheta // 2:]
-                    ind = find(searchval, searcharr2) + self.ntheta // 2
+                    ind = self._find(searchval, searcharr2) + self.ntheta // 2
                 else:
                     searcharr2 = searcharr[0:self.ntheta // 2]
-                    ind = find(searchval, searcharr2)
+                    ind = self._find(searchval, searcharr2)
                 section = np.arange(ind - stencil_width // 2,
                                     ind + stencil_width // 2)
                 theta_sec = self.theta_grid[section]
@@ -577,14 +586,28 @@ class Miller(object):
                                     * self.r_minor_fs[isg] / np.sqrt(1 - delta[i]**2)
             s_zeta[i] = zeta_spl.derivatives(self.r_minor_fs[isg])[1] \
                                 * self.r_minor_fs[isg]
+        output['trpeps'] = eps_poi
+        output['q0'] = q_poi
+        output['shat'] = (r_poi / q_poi) * q_spl.derivatives(r_poi)[1]
+        output['amhd'] = amhd_spl(r_poi)
+        output['drR'] = drR_spl(r_poi)
+        output['kappa'] = kappa_spl(r_poi)
+        output['s_kappa'] = kappa_spl.derivatives(r_poi)[1] * r_poi / kappa_spl(r_poi)
+        output['delta'] = delta_spl(r_poi)
+        output['s_delta'] = delta_spl.derivatives(r_poi)[1] * r_poi \
+                                        / np.sqrt(1 - delta_spl(r_poi)**2)
+        output['zeta'] = zeta_spl(r_poi)
+        output['s_zeta'] = zeta_spl.derivatives(r_poi)[1] * r_poi
+        output['minor_r'] = 1.0
+        output['major_R'] = R0_poi / self.a_lcfs
 
 
         print('\n\nShaping parameters for flux surface r=%9.5g, r/a=%9.5g:' %
               (r_poi, self.rova))
         print('Copy the following block into a GENE parameters file:\n')
-        print('trpeps  = %9.5g' % (r_poi / R0_poi))
-        print('q0      = %9.5g' % q_spl(r_poi))
-        print('shat    = %9.5g !(defined as r/q*dq_dr)' % (r_poi / q_spl(r_poi) \
+        print('trpeps  = %9.5g' % (eps_poi))
+        print('q0      = %9.5g' % q_poi)
+        print('shat    = %9.5g !(defined as r/q*dq_dr)' % (r_poi / q_poi \
                                  * q_spl.derivatives(r_poi)[1]))
         print('amhd    = %9.5g' % amhd_spl(r_poi))
         print('drR     = %9.5g' % drR_spl(r_poi))
@@ -597,7 +620,7 @@ class Miller(object):
         print('zeta    = %9.5g' % zeta_spl(r_poi))
         print('s_zeta  = %9.5g' % (zeta_spl.derivatives(r_poi)[1] * r_poi))
         print('minor_r = %9.5g' % (1.0))
-        print('major_R = %9.5g' % (R0_poi / r_poi * self.rova))
+        print('major_R = %9.5g' % (R0_poi / self.a_lcfs))
 
 
         if self.plot:
@@ -650,8 +673,9 @@ class Miller(object):
                 ax.axvline(self.psinorm, 0, 1, ls='--', color='k', lw=2)
             plt.tight_layout(pad=0.3)
 
-
+        return output
 
 
 if __name__ == '__main__':
-    eq = Miller(plot=0)
+    eq = Geqdsk(plot=0)
+    miller = eq(psinorm=0.8)
