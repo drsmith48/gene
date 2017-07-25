@@ -10,6 +10,7 @@ from __future__ import division
 
 import os.path
 import tkinter.filedialog as fd
+import tkinter as tk
 from builtins import range
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,7 +19,12 @@ from scipy.interpolate import interp1d
 from scipy.interpolate import UnivariateSpline as US
 from jinja2 import Environment, FileSystemLoader
 
+root = tk.Tk()
+root.withdraw()
 
+def get_filename():
+    fobject = fd.askopenfile(title='Select GEQDSK file')
+    return fobject.name
 
 
 class Geqdsk(object):
@@ -26,10 +32,10 @@ class Geqdsk(object):
     def __init__(self, gfile=None, plot=True):
         self.plot = plot
         if not gfile:
-            if os.path.exists('pegasus-eq21.geqdsk'):
+            if os.path.exists('pegasus-eq21.geqdsk') and False:
                 gfile = 'pegasus-eq21.geqdsk'
             else:
-                gfile = fd.askopenfile()
+                gfile = get_filename()
         self.gfile = gfile
 
         self.psinorm = None
