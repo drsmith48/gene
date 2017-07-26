@@ -13,9 +13,9 @@ July 2017 - Refactored (David R. Smith)
 from __future__ import print_function
 from __future__ import division
 
-import tkinter.filedialog as fd
-import tkinter as tk
 from builtins import range
+#import tkinter.filedialog as fd
+#import tkinter as tk
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import RectBivariateSpline as RBS
@@ -25,11 +25,12 @@ from jinja2 import Environment, FileSystemLoader
 
 
 def get_filename():
-    root = tk.Tk()
-    root.withdraw()
-    root.update()
-    root.focus()
-    filename = fd.askopenfilename(title='Select GEQDSK file')
+#    root = tk.Tk()
+#    root.withdraw()
+#    root.update()
+#    root.focus()
+#    filename = fd.askopenfilename(title='Select GEQDSK file')
+    filename = 'pegasus-eq21.geqdsk'
     return filename
 
 
@@ -50,7 +51,7 @@ class Geqdsk(object):
         Geqdsk object
     """
 
-    def __init__(self, gfile=None, plot=True):
+    def __init__(self, gfile=None, plot=False):
         """See class docstring."""
         self.plot = plot
         self.gfile = gfile
