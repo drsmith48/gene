@@ -21,7 +21,6 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import RectBivariateSpline as RBS
 from scipy.interpolate import interp1d
 from scipy.interpolate import UnivariateSpline as US
-from jinja2 import Environment, FileSystemLoader
 
 
 def get_filename():
@@ -379,7 +378,7 @@ class Geqdsk(object):
             plt.gca().set_aspect('equal')
 
 
-    def miller(self, psinorm=0.8, rova=None, omt_factor=0.2):
+    def miller(self, psinorm=None, rova=None, omt_factor=None):
         """
         Calculate Miller quantities.
 
@@ -398,31 +397,29 @@ class Geqdsk(object):
         """
 
         output = {}
+        
+        if psinorm is None and rova is None:
+            psinorm = 0.8
 
-        if psinorm:
-            # use psinorm
-            self.psinorm = psinorm
-            if self.rova:
-                print('ignoring `rova`, using `psinorm`')
-            self.rova = None
-        else:
-            # use rova
-            self.rova = rova
-            self.psinorm = None
-
-        # position values
+        if omt_factor is None:
+            omt_factor = 0.2
+            
+        # r and psi splines
         psi_grid_spl =  US(self.r_minor_fs, self.psi_grid,   k=self.io, s=self.s)
         r_min_spl =     US(self.psi_grid,   self.r_minor_fs, k=self.io, s=self.s)
-        if self.rova:
-            # calc psi, psinorm, and r from r/a
-            r_poi = self.rova * self.a_lcfs  # r = r/a * a; FS minor radius
-            psi_poi = float(psi_grid_spl(r_poi))  # psi at FS
-            self.psinorm = (psi_poi - self.psiax) / (self.psisep - self.psiax)  # psi-norm at FS
-        else:
-            # calc psi, r, r/a from psi-norm
+
+        if psinorm:
+            print('using `psinorm`, ignoring `rova`')
+            self.psinorm = psinorm
             psi_poi = self.psinorm * (self.psisep - self.psiax) + self.psiax
-            r_poi = float(r_min_spl(psi_poi))
+            r_poi = r_min_spl(psi_poi)[()]
             self.rova = r_poi / self.a_lcfs
+        else:
+            print('using `rova`, ignoring `psinorm`')
+            self.rova = rova
+            r_poi = self.rova * self.a_lcfs  # r = r/a * a; FS minor radius
+            psi_poi = psi_grid_spl(r_poi)[()]  # psi at FS
+            self.psinorm = (psi_poi - self.psiax) / (self.psisep - self.psiax)  # psi-norm at FS
 
         output['gfile'] = self.gfile
         output['psinorm'] = self.psinorm
@@ -480,6 +477,7 @@ class Geqdsk(object):
         omt = omp_poi * omt_factor
         omn = omp_poi - omt
         output['omt'] = omt
+        output['omt_factor'] = omt_factor
         output['omn'] = omn
         print('\n*** Temp/dens gradients ***')
         print('omt_factor = {:.3g}'.format(omt_factor))
