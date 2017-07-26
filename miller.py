@@ -7,13 +7,12 @@ Created on Tue Mar 26 09:32:25 2013
 
 July 2017 - Refactored (David R. Smith)
     "Futurized" for python 2/3 compatability
-    Created Geqdsk class to process geqdsk files and 
+    Created Geqdsk class to process geqdsk files and
     extract Miller quantities
 """
 from __future__ import print_function
 from __future__ import division
 
-import os.path
 import tkinter.filedialog as fd
 import tkinter as tk
 from builtins import range
@@ -24,27 +23,29 @@ from scipy.interpolate import interp1d
 from scipy.interpolate import UnivariateSpline as US
 from jinja2 import Environment, FileSystemLoader
 
-root = tk.Tk()
-root.withdraw()
 
 def get_filename():
-    fobject = fd.askopenfile(title='Select GEQDSK file')
-    return fobject.name
+    root = tk.Tk()
+    root.withdraw()
+    root.update()
+    root.focus()
+    filename = fd.askopenfilename(title='Select GEQDSK file')
+    return filename
 
 
 class Geqdsk(object):
     """Class for geqdsk files.
-    
+
     Args:
-        gfile (str, default None): filename for geqdsk file; 
+        gfile (str, default None): filename for geqdsk file;
             will present file dialog if evaluates to false
         plot (bool, default True): plot profiles
-        
+
     Methods:
         load_gfile():  Select new geqdsk file from dialog, then load
         miller(...):   Calculate Miller quantities
         __call__(...): Alias for miller(...)
-        
+
     Return:
         Geqdsk object
     """
@@ -55,7 +56,7 @@ class Geqdsk(object):
         self.gfile = gfile
         if not self.gfile:
             self.gfile = get_filename()
-        
+
         self.psinorm = None
         self.rova= None
 
@@ -81,7 +82,7 @@ class Geqdsk(object):
                 ind = i
                 mindiff = diff
         return ind
-    
+
     def load_gfile(self):
         self.gfile = get_filename()
         self._process_gfile()
@@ -380,7 +381,7 @@ class Geqdsk(object):
     def miller(self, psinorm=0.8, rova=None, omt_factor=0.2):
         """
         Calculate Miller quantities.
-        
+
         Args:
             psinorm (float, default 0.8):
                 psi-norm for Miller quantities (overrides rova)
@@ -389,7 +390,7 @@ class Geqdsk(object):
             omt_factor (float, default 0.2):
                 sets omt = omp * omt_factor
                 and omn = omp * (1-omt_factor)
-                
+
         Returns:
             dictionary with Miller quantities and reference values
             for GENE simulation
@@ -421,7 +422,7 @@ class Geqdsk(object):
             psi_poi = self.psinorm * (self.psisep - self.psiax) + self.psiax
             r_poi = float(r_min_spl(psi_poi))
             self.rova = r_poi / self.a_lcfs
-            
+
         output['gfile'] = self.gfile
         output['psinorm'] = self.psinorm
         output['rova'] = self.rova
