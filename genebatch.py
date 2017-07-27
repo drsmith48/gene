@@ -14,33 +14,37 @@ import miller
 genehome = os.environ['GENEHOME']
 initdir = os.path.abspath(os.curdir)
 
+context = {'jobname':None, # begin SBATCH variables
+           'partition':None,
+           'walltime':None,
+           'nodes':None,
+           'ntasks':None,
+           'mempercpu':None,
+           }
+
+
 def genesubmit(miller=None, subparam=None, subvalue=None):
     """
     Prepare and submit a single GENE problem.
     """
-    # run newprob in GENE home directory
+    # GENE home directory
     os.chdir(genehome)
-    print('Creating new problem')
     ret = sp.run(['./newprob'], timeout=10)
     probdir = 'prob{:d}'.format(ret.returncode)
+    context['jobname'] = 'GENE-'+probdir
 
-    # change to probdir and replace parameters and launcher.cmd
+    # problem directory
     os.chdir(probdir)
     env = Environment(loader=FileSystemLoader(initdir))
-
     template = env.get_template('launcher.template.sh')
     os.remove('launcher.cmd')
     with open('launcher.cmd', 'w') as f:
-#        f.write(template.render(context))
-        f.write('asdf')
-
+        f.write(template.render(context))
     template = env.get_template('parameters.template.f90')
     os.remove('parameters')
     with open('parameters', 'w') as f:
-#        f.write(template.render(context))
-        f.write('qwerty')
-    
-    print(os.listdir('.'))
+        f.write(template.render(context))
+    ret = sp.run(['sbatch', 'launcher.cmd'], timeout=10)
     
     # return to original directory
     os.chdir(initdir)

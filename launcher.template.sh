@@ -1,13 +1,13 @@
 #!/bin/tcsh
 #SBATCH -J {{ jobname|default('GENE', true) }}
 #SBATCH -p {{ partition|default('kruskal', true) }}
-#SBATCH --time={{ walltime|default('24:0:00', true) }}
-#SBATCH --nodes={{ nodes|default('1', true) }}
+#SBATCH --time={{ walltime|default('12:0:00', true) }}
+#SBATCH --nodes={{ nodes|default('2', true) }}
 #SBATCH --ntasks={{ tasks|default('64', true) }}
 #SBATCH --mem-per-cpu={{ mempercpu|default('2000', true) }}
-#SBATCH --workdir={{ workdir|default('./', true) }}
 #SBATCH --mail-type=ALL --mail-user=drsmith@pppl.gov
 #SBATCH -o std.out -e std.err
+#####SBATCH --workdir={{ workdir|default('./', true) }}
 
 echo "--------------------------------"
 echo "--------------------------------"
@@ -36,14 +36,17 @@ mkdir ${localdir}
 echo "Creating sym links in local dir"
 cp -sL parameters scanscript gene_pppl_pgf ${localdir}
 
-echo "cd to local dir"
+echo "cd to local dir ${localdir}"
 cd ${localdir}
+pwd
 
 echo "Running scanscript"
-./scanscript --n_pes={{ tasks|default('64', true) }} --procs_per_node=32
+#./scanscript --np={{ tasks|default('64', true) }} --ppn=32 --mps=4
 
 echo "Copy std.out, std.err, scanfiles*/ to ${SLURM_SUBMIT_DIR}"
 cp -f std.* scanfiles*/ ${SLURM_SUBMIT_DIR}
+ls -l ${localdir}
+ls -l ${SLURM_SUBMIT_DIR}
 
 echo "Finished"
 exit

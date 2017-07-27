@@ -5,7 +5,7 @@ n_procs_w = 0
 n_procs_x = 0
 n_procs_y = 0
 n_procs_z = 0
-n_procs_sim = {{ n_procs_sim|default('32', true) }}
+n_procs_sim = {{ ntasks|default('64', true) }}
 /
 
 &box
