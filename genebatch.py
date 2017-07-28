@@ -7,6 +7,7 @@ Created on Tue Jul 25 17:31:13 2017
 """
 
 import os
+import shutil
 import subprocess as sp
 from jinja2 import Environment, FileSystemLoader
 import miller
@@ -14,7 +15,7 @@ import miller
 genehome = os.environ['GENEHOME']
 initdir = os.path.abspath(os.curdir)
 
-context = {'jobname':None, # begin SBATCH variables
+context = {'jobname':None,
            'partition':None,
            'walltime':None,
            'nodes':None,
@@ -27,13 +28,18 @@ def genesubmit(miller=None, subparam=None, subvalue=None):
     """
     Prepare and submit a single GENE problem.
     """
-    # GENE home directory
+    context_mod = {'nodes':2, 
+                   'tasks':64, 
+                   'partition':'kruskal'}
+    context.update(context_mod)
+
+    # cd to GENE home directory
     os.chdir(genehome)
     ret = sp.run(['./newprob'], timeout=10)
     probdir = 'prob{:d}'.format(ret.returncode)
     context['jobname'] = 'GENE-'+probdir
-
-    # problem directory
+    
+    # cd to problem directory
     os.chdir(probdir)
     env = Environment(loader=FileSystemLoader(initdir))
     template = env.get_template('launcher.template.sh')
@@ -44,9 +50,10 @@ def genesubmit(miller=None, subparam=None, subvalue=None):
     os.remove('parameters')
     with open('parameters', 'w') as f:
         f.write(template.render(context))
+    shutil.copyfile('parameters','parameters_orig')
     ret = sp.run(['sbatch', 'launcher.cmd'], timeout=10)
     
-    # return to original directory
+    # cd to initial directory
     os.chdir(initdir)
 
 

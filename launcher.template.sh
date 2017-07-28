@@ -7,7 +7,6 @@
 #SBATCH --mem-per-cpu={{ mempercpu|default('2000', true) }}
 #SBATCH --mail-type=ALL --mail-user=drsmith@pppl.gov
 #SBATCH -o std.out -e std.err
-#####SBATCH --workdir={{ workdir|default('./', true) }}
 
 echo "--------------------------------"
 echo "--------------------------------"
@@ -29,23 +28,39 @@ set sourcefile="/p/gene/drsmith/gene-pgf.csh"
 echo "Sourcing ${sourcefile}"
 source ${sourcefile}
 
-set localdir="/local/drsmith-${SLURM_JOB_NAME}-${SLURM_JOB_ID}"
-echo "Creating local dir ${localdir}"
-mkdir ${localdir}
+set genedir="/local/drsmith-${SLURM_JOB_NAME}-${SLURM_JOB_ID}"
+mkdir ${genedir}
+cd ${genedir}
+ln -s ${GENEHOME}/tools tools
+ln -s ${GENEHOME}/bin bin
+ln -s ${GENEHOME}/makefile makefile
+ln -s ${GENEHOME}/makefiles makefiles
+ln -s ${GENEHOME}/.git .git
+ln -s ${GENEHOME}/src src
+ls -al
 
-echo "Creating sym links in local dir"
-cp -sL parameters scanscript gene_pppl_pgf ${localdir}
+mkdir probdir
+cd probdir
 
-echo "cd to local dir ${localdir}"
-cd ${localdir}
-pwd
+##set localdir="/local/drsmith-${SLURM_JOB_NAME}-${SLURM_JOB_ID}"
+##echo "Creating and move to local dir ${localdir}"
+##mkdir ${localdir}
+##cd ${localdir}
+##pwd
+
+echo "Creating sym links in local problem dir"
+ln -s ${SLURM_SUBMIT_DIR}/parameters parameters
+ln -s ${SLURM_SUBMIT_DIR}/scanscript scanscript
+ln -s ${SLURM_SUBMIT_DIR}/gene_pppl_pgf gene_pppl_pgf
+ls -l
 
 echo "Running scanscript"
-#./scanscript --np={{ tasks|default('64', true) }} --ppn=32 --mps=4
+./scanscript --np={{ tasks|default('64', true) }} --ppn=32 --mps=4
+###${SLURM_SUBMIT_DIR}/scanscript --np={{ tasks|default('64', true) }} --ppn=32 --mps=4
 
-echo "Copy std.out, std.err, scanfiles*/ to ${SLURM_SUBMIT_DIR}"
-cp -f std.* scanfiles*/ ${SLURM_SUBMIT_DIR}
-ls -l ${localdir}
+echo "Copy scanfiles*/ to ${SLURM_SUBMIT_DIR}"
+cp -fR scanfiles*/ ${SLURM_SUBMIT_DIR}
+ls -l
 ls -l ${SLURM_SUBMIT_DIR}
 
 echo "Finished"
