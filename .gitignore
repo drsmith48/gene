@@ -1,3 +1,4 @@
 *.geqdsk
 .DS_Store
 __pycache__
+.spyproject

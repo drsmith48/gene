@@ -13,9 +13,10 @@ July 2017 - Refactored (David R. Smith)
 from __future__ import print_function
 from __future__ import division
 
+import os
 from builtins import range
-#import tkinter.filedialog as fd
-#import tkinter as tk
+import tkinter.filedialog as fd
+import tkinter as tk
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import RectBivariateSpline as RBS
@@ -24,12 +25,11 @@ from scipy.interpolate import UnivariateSpline as US
 
 
 def get_filename():
-#    root = tk.Tk()
-#    root.withdraw()
-#    root.update()
-#    root.focus()
-#    filename = fd.askopenfilename(title='Select GEQDSK file')
-    filename = 'pegasus-eq21.geqdsk'
+    root = tk.Tk()
+    root.withdraw()
+    filename = fd.askopenfilename(initialdir=os.environ['GENETOP'],
+                                  title='Select GEQDSK file')
+    #filename = 'pegasus-eq21.geqdsk'
     return filename
 
 
@@ -50,9 +50,10 @@ class Geqdsk(object):
         Geqdsk object
     """
 
-    def __init__(self, gfile=None, plot=False):
+    def __init__(self, gfile=None, plot=False, quiet=False):
         """See class docstring."""
         self.plot = plot
+        self.quiet = quiet
         self.gfile = gfile
         if not self.gfile:
             self.gfile = get_filename()
@@ -97,8 +98,6 @@ class Geqdsk(object):
         # parse line 0
         self.nw = int(eqdsk[0].split()[-2])
         self.nh = int(eqdsk[0].split()[-1])
-        print('Header: %s' % eqdsk[0])
-        print('Resolution: %d x %d' % (self.nw, self.nh))
 
         # parse line 1
         try:
@@ -323,15 +322,18 @@ class Geqdsk(object):
         self.Rmaxis_lcfs = self.R_major_fs[-1]
         self.a_lcfs = self.r_minor_fs[-1]
         self.eps_lcfs = self.a_lcfs / self.Rmaxis_lcfs
-
-        print('\n*** Magnetic axis and LCFS ***')
-        print('R mag. axis = {:.3g} m'.format(self.Rmaxis))
-        print('Z mag. axis = {:.3g} m'.format(self.Zmaxis))
-        print('psi-axis = {:.3e} Wb/rad'.format(self.psiax))
-        print('psi-sep = {:.3e} Wb/rad'.format(self.psisep))
-        print('R0_lcfs = {:.3g} m'.format(self.Rmaxis_lcfs))
-        print('a_lcfs = {:.3g} m'.format(self.a_lcfs))
-        print('eps_lcfs = {:.3g}'.format(self.eps_lcfs))
+        
+        if not self.quiet:
+            print('Header: %s' % eqdsk[0])
+            print('Resolution: %d x %d' % (self.nw, self.nh))
+            print('\n*** Magnetic axis and LCFS ***')
+            print('R mag. axis = {:.3g} m'.format(self.Rmaxis))
+            print('Z mag. axis = {:.3g} m'.format(self.Zmaxis))
+            print('psi-axis = {:.3e} Wb/rad'.format(self.psiax))
+            print('psi-sep = {:.3e} Wb/rad'.format(self.psisep))
+            print('R0_lcfs = {:.3g} m'.format(self.Rmaxis_lcfs))
+            print('a_lcfs = {:.3g} m'.format(self.a_lcfs))
+            print('eps_lcfs = {:.3g}'.format(self.eps_lcfs))
 
 
     def plot_gfile(self):
@@ -376,7 +378,7 @@ class Geqdsk(object):
             plt.xlabel(r'$R$ [m]', fontsize=14)
             plt.ylabel(r'$Z$ [m]', fontsize=14)
             plt.gca().set_aspect('equal')
-
+            
 
     def miller(self, psinorm=None, rova=None, omt_factor=None):
         """
@@ -432,57 +434,69 @@ class Geqdsk(object):
         q_poi = q_spl(r_poi)[()]
         drdpsi_poi = float(r_min_spl.derivatives(psi_poi)[1])
         eps_poi = r_poi / R0_poi
-        print('\n*** Flux surfance ***')
-        print('r_min/a = {:.3f}'.format(self.rova))
-        print('psinorm = {:.3f}'.format(self.psinorm))
-        print('r_min = {:.3f} m'.format(r_poi))
-        print('R_maj = {:.3f} m'.format(R0_poi))
-        print('eps = {:.3f}'.format(eps_poi))
-        print('q = {:.3f}'.format(q_poi))
-        print('psi = {:.3e} Wb/rad'.format(psi_poi))
-        print('dr/dpsi = {:.3g} m/(Wb/rad)'.format(drdpsi_poi))
+        if not self.quiet:
+            print('\n*** Flux surfance ***')
+            print('r_min/a = {:.3f}'.format(self.rova))
+            print('psinorm = {:.3f}'.format(self.psinorm))
+            print('r_min = {:.3f} m'.format(r_poi))
+            print('R_maj = {:.3f} m'.format(R0_poi))
+            print('eps = {:.3f}'.format(eps_poi))
+            print('q = {:.3f}'.format(q_poi))
+            print('psi = {:.3e} Wb/rad'.format(psi_poi))
+            print('dr/dpsi = {:.3g} m/(Wb/rad)'.format(drdpsi_poi))
 
-        F_spl = US(self.r_minor_fs, self.F_fs,       k=self.io, s=self.s)
+        F_spl = US(self.r_minor_fs, self.F_fs, k=self.io, s=self.s)
         F_poi = F_spl(r_poi)[()]  # F of FS
         Bref_poi = F_poi / R0_poi
-        p_spl =         US(self.r_minor_fs, self.p_fs,       k=self.io, s=self.s)
+        p_spl = US(self.r_minor_fs, self.p_fs, k=self.io, s=self.s)
         p_poi = p_spl(r_poi)[()]
-        n_poi = p_poi / (self.ti*1e3*1.602e-19) / 1e19
+        t_poi = self.ti
+        n_poi = p_poi / (t_poi*1e3*1.602e-19) / 1e19
         output['Lref'] = self.a_lcfs
         output['Bref'] = Bref_poi
         output['pref'] = p_poi
-        output['Tref'] = self.ti
+        output['Tref'] = t_poi
         output['nref'] = n_poi
-        print('\n*** Reference values ***')
-        print('Lref = {:.3g} m ! for Lref=a convention'.format(self.a_lcfs))
-        print('Bref = {:.3g} T'.format(Bref_poi))
-        print('pref = {:.3g} Pa'.format(p_poi))
-        print('Tref = {:.3g} keV'.format(self.ti))
-        print('nref = {:.3g} 1e19/m^3'.format(n_poi))
+        beta = 403.e-5*n_poi*self.ti/(Bref_poi**2)
+        coll = 2.3031e-5 * (24-np.log(np.sqrt(n_poi*1e13)/(1e3*t_poi))) \
+                    * self.a_lcfs * n_poi / (t_poi**2)
+        output['beta'] = beta
+        output['coll'] = coll
+        if not self.quiet:
+            print('\n*** Reference values ***')
+            print('Lref = {:.3g} m ! for Lref=a convention'.format(self.a_lcfs))
+            print('Bref = {:.3g} T'.format(Bref_poi))
+            print('pref = {:.3g} Pa'.format(p_poi))
+            print('Tref = {:.3g} keV'.format(t_poi))
+            print('nref = {:.3g} 1e19/m^3'.format(n_poi))
+            print('beta = {:.3g}'.format(beta))
+            print('coll = {:.3g}'.format(coll))
 
-        pprime_spl = US(self.r_minor_fs, self.pprime_fs,  k=self.io, s=1e-4)
+        pprime_spl = US(self.r_minor_fs, self.pprime_fs, k=self.io, s=1e-4)
         pprime_poi = pprime_spl(r_poi)[()]
         pm_poi = Bref_poi**2/(2*4*3.14e-7)
         dpdr_poi = pprime_poi/drdpsi_poi
-        omp_poi = -(self.a_lcfs / p_poi) * dpdr_poi
         dpdx_pm = -dpdr_poi/pm_poi
+        omp_poi = -(self.a_lcfs / p_poi) * dpdr_poi
         output['dpdx_pm'] = dpdx_pm
         output['omp'] = omp_poi
-        print('\n*** Pressure gradients ***')
-        print('dp/dpsi      = {:.3g} Pa/(Wb/rad)'.format(pprime_poi))
-        print('p_m = 2mu/Bref**2 = {:.3g} Pa'.format(pm_poi))
-        print('-(dp/dr)/p_m      = {:.3g} 1/m'.format(dpdx_pm))
-        print('omp = a/p * dp/dr = {:.3g} ! with Lref=a'.format(omp_poi))
+        if not self.quiet:
+            print('\n*** Pressure gradients ***')
+            print('dp/dpsi      = {:.3g} Pa/(Wb/rad)'.format(pprime_poi))
+            print('p_m = 2mu/Bref**2 = {:.3g} Pa'.format(pm_poi))
+            print('-(dp/dr)/p_m      = {:.3g} 1/m'.format(dpdx_pm))
+            print('omp = a/p * dp/dr = {:.3g} ! with Lref=a'.format(omp_poi))
 
         omt = omp_poi * omt_factor
-        omn = omp_poi - omt
+        omn = omp_poi * (1-omt_factor)
         output['omt'] = omt
         output['omt_factor'] = omt_factor
         output['omn'] = omn
-        print('\n*** Temp/dens gradients ***')
-        print('omt_factor = {:.3g}'.format(omt_factor))
-        print('omt = a/T * dT/dr = {:.3g}'.format(omt))
-        print('omn = a/n * dn/dr = {:.3g}'.format(omn))
+        if not self.quiet:
+            print('\n*** Temp/dens gradients ***')
+            print('omt_factor = {:.3g}'.format(omt_factor))
+            print('omt = a/T * dT/dr = {:.3g}'.format(omt))
+            print('omn = a/n * dn/dr = {:.3g}'.format(omn))
 
 
         sgstart = self.nw // 10
@@ -652,26 +666,26 @@ class Geqdsk(object):
         output['minor_r'] = 1.0
         output['major_R'] = R0_poi / self.a_lcfs
 
-
-        print('\n\nShaping parameters for flux surface r=%9.5g, r/a=%9.5g:' %
-              (r_poi, self.rova))
-        print('Copy the following block into a GENE parameters file:\n')
-        print('trpeps  = %9.5g' % (eps_poi))
-        print('q0      = %9.5g' % q_poi)
-        print('shat    = %9.5g !(defined as r/q*dq_dr)' % (r_poi / q_poi \
-                                 * q_spl.derivatives(r_poi)[1]))
-        print('amhd    = %9.5g' % amhd_spl(r_poi))
-        print('drR     = %9.5g' % drR_spl(r_poi))
-        print('kappa   = %9.5g' % kappa_spl(r_poi))
-        print('s_kappa = %9.5g' % (kappa_spl.derivatives(r_poi)[1] \
-                                   * r_poi / kappa_spl(r_poi)))
-        print('delta   = %9.5g' % delta_spl(r_poi))
-        print('s_delta = %9.5g' % (delta_spl.derivatives(r_poi)[1] \
-                                   * r_poi / np.sqrt(1 - delta_spl(r_poi)**2)))
-        print('zeta    = %9.5g' % zeta_spl(r_poi))
-        print('s_zeta  = %9.5g' % (zeta_spl.derivatives(r_poi)[1] * r_poi))
-        print('minor_r = %9.5g' % (1.0))
-        print('major_R = %9.5g' % (R0_poi / self.a_lcfs))
+        if not self.quiet:
+            print('\n\nShaping parameters for flux surface r=%9.5g, r/a=%9.5g:' %
+                  (r_poi, self.rova))
+            print('Copy the following block into a GENE parameters file:\n')
+            print('trpeps  = %9.5g' % (eps_poi))
+            print('q0      = %9.5g' % q_poi)
+            print('shat    = %9.5g !(defined as r/q*dq_dr)' % (r_poi / q_poi \
+                                     * q_spl.derivatives(r_poi)[1]))
+            print('amhd    = %9.5g' % amhd_spl(r_poi))
+            print('drR     = %9.5g' % drR_spl(r_poi))
+            print('kappa   = %9.5g' % kappa_spl(r_poi))
+            print('s_kappa = %9.5g' % (kappa_spl.derivatives(r_poi)[1] \
+                                       * r_poi / kappa_spl(r_poi)))
+            print('delta   = %9.5g' % delta_spl(r_poi))
+            print('s_delta = %9.5g' % (delta_spl.derivatives(r_poi)[1] \
+                                       * r_poi / np.sqrt(1 - delta_spl(r_poi)**2)))
+            print('zeta    = %9.5g' % zeta_spl(r_poi))
+            print('s_zeta  = %9.5g' % (zeta_spl.derivatives(r_poi)[1] * r_poi))
+            print('minor_r = %9.5g' % (1.0))
+            print('major_R = %9.5g' % (R0_poi / self.a_lcfs))
 
 
         if self.plot:
@@ -728,5 +742,5 @@ class Geqdsk(object):
 
 
 if __name__ == '__main__':
-    eq = Geqdsk(plot=0)
-    miller = eq(psinorm=0.8)
+    geq = Geqdsk(plot=True)
+    miller = geq.miller()

@@ -1,9 +1,9 @@
 #!/bin/tcsh
 #SBATCH -J {{ jobname|default('GENE', true) }}
 #SBATCH -p {{ partition|default('kruskal', true) }}
-#SBATCH --time={{ walltime|default('12:0:00', true) }}
-#SBATCH --nodes={{ nodes|default('2', true) }}
-#SBATCH --ntasks={{ tasks|default('64', true) }}
+#SBATCH --time={{ walltime|default('8:0:00', true) }}
+#SBATCH --ntasks={{ ntasks|default('64', true) }}
+#SBATCH --ntasks-per-node=32
 #SBATCH --mem-per-cpu={{ mempercpu|default('2000', true) }}
 #SBATCH --mail-type=ALL --mail-user=drsmith@pppl.gov
 #SBATCH -o std.out -e std.err
@@ -24,12 +24,17 @@ echo "Node list: ${SLURM_NODELIST}"
 echo "--------------------------------"
 echo " "
 
-set sourcefile="/p/gene/drsmith/gene-pgf.csh"
-echo "Sourcing ${sourcefile}"
-source ${sourcefile}
+echo "Sourcing env.csh"
+source /p/gene/drsmith/env.csh
 
 echo "Running scanscript"
-./scanscript --np={{ tasks|default('64', true) }} --ppn=32 --mps=4
+set t1=`date +%s`
+./scanscript --np=${SLURM_NTASKS} --ppn=32 --mps=1
+set t2=`date +%s`
+set delt=`expr ${t2} - ${t1}`
+set hr=`expr ${delt} / 3600`
+set min=`expr ${delt} % 3600 / 60`
+echo "Elapsed time: ${hr} hr ${min} min"
 
 echo "Finished"
 exit
